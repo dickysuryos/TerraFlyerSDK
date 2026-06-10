@@ -41,16 +41,100 @@ public class TerraFlyerSDK {
     /// - Parameter userActivity: The user activity containing the universal link webpageURL.
     /// - Returns: `true` if the URL belongs to your campaign links domain and is handled; `false` otherwise.
     @discardableResult
+    /// Handles direct Universal Links clicked when the app is already installed.
+    /// Call this from `application(_:continue:restorationHandler:)` in your AppDelegate,
+    /// or from SceneDelegate's `scene(_:continue:)`.
+    ///
+    /// - Parameter userActivity: The user activity containing the universal link webpageURL.
+    /// - Returns: `true` if the URL belongs to your campaign links domain and is handled; `false` otherwise.
+    @discardableResult
     public func handleUniversalLink(_ userActivity: NSUserActivity) -> Bool {
         guard let incomingURL = userActivity.webpageURL else { return false }
         print("[TerraFlyerSDK] Processing incoming Universal Link: \(incomingURL.absoluteString)")
         
-        // Parse click_id if appended directly (or extract from slug if backend provides deep-link payload)
-        // For standard universal links routing, we trigger callback immediately
+        // Parse the campaign slug from the Universal Link path (e.g. "/l/promo-2026")
+        let pathComponents = incomingURL.pathComponents
+        if pathComponents.count >= 3 && pathComponents[1] == "l" {
+            let slug = pathComponents[2]
+            print("[TerraFlyerSDK] Attempting to resolve custom deep-link scheme for slug: \(slug)")
+            
+            resolveDeepLink(slug: slug) { [weak self] resolvedURL in
+                guard let self = self else { return }
+                var routingURL = resolvedURL ?? incomingURL
+                if let resolved = resolvedURL {
+                    // Append query parameters from the original universal link (e.g. custom campaign tags)
+                    routingURL = self.appendQueryItems(from: incomingURL, to: resolved)
+                }
+                print("[TerraFlyerSDK] Routing Universal Link to delegate: \(routingURL.absoluteString)")
+                DispatchQueue.main.async {
+                    self.delegate?.didReceiveDeepLink(routingURL, clickId: self.activeClickId)
+                }
+            }
+            return true
+        }
+        
+        // Fallback redirection trigger callback immediately
         DispatchQueue.main.async {
             self.delegate?.didReceiveDeepLink(incomingURL, clickId: self.activeClickId)
         }
         return true
+    }
+    
+    /// Resolves a campaign slug to its configured deep link metadata.
+    private func resolveDeepLink(slug: String, completion: @escaping (URL?) -> Void) {
+        guard let backendURL = self.backendURL else {
+            completion(nil)
+            return
+        }
+        
+        let url = backendURL.appendingPathComponent("api/links/\(slug)")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                print("[TerraFlyerSDK] Error resolving deep link: \(error.localizedDescription)")
+                completion(nil)
+                return
+            }
+            
+            guard let data = data,
+                  let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200 else {
+                completion(nil)
+                return
+            }
+            
+            do {
+                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let deepLinkStr = json["deepLink"] as? String,
+                   !deepLinkStr.isEmpty,
+                   let url = URL(string: deepLinkStr) {
+                    completion(url)
+                    return
+                }
+            } catch {
+                print("[TerraFlyerSDK] Error parsing resolve JSON: \(error.localizedDescription)")
+            }
+            completion(nil)
+        }
+        task.resume()
+    }
+    
+    /// Appends query items from one URL to another URL.
+    private func appendQueryItems(from sourceURL: URL, to targetURL: URL) -> URL {
+        guard let sourceComponents = URLComponents(url: sourceURL, resolvingAgainstBaseURL: true),
+              let sourceQueryItems = sourceComponents.queryItems,
+              !sourceQueryItems.isEmpty else {
+            return targetURL
+        }
+        
+        var targetComponents = URLComponents(url: targetURL, resolvingAgainstBaseURL: true)
+        var targetQueryItems = targetComponents?.queryItems ?? []
+        targetQueryItems.append(contentsOf: sourceQueryItems)
+        targetComponents?.queryItems = targetQueryItems
+        
+        return targetComponents?.url ?? targetURL
     }
     
     /// Queries the self-hosted backend to perform fuzzy IP + UserAgent fingerprint matching.
