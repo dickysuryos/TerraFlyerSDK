@@ -131,15 +131,22 @@ public class TerraFlyerSDK {
                         self.activeClickId = clickId
                     }
                     
-                    if let deepLinkStr = json["deep_link"] as? String,
-                       let deepLinkURL = URL(string: deepLinkStr) {
-                        print("[TerraFlyerSDK] Deferred deep link successfully attributed! Deep Link: \(deepLinkStr)")
+                    // Route using deep link custom scheme, or fall back to universal link URL if custom scheme is omitted
+                    var resolvedURL: URL? = nil
+                    if let deepLinkStr = json["deep_link"] as? String, !deepLinkStr.isEmpty, let url = URL(string: deepLinkStr) {
+                        resolvedURL = url
+                    } else if let universalLinkStr = json["universal_link"] as? String, !universalLinkStr.isEmpty, let url = URL(string: universalLinkStr) {
+                        resolvedURL = url
+                    }
+                    
+                    if let routingURL = resolvedURL {
+                        print("[TerraFlyerSDK] Deferred link successfully attributed! Routing URL: \(routingURL.absoluteString)")
                         DispatchQueue.main.async {
-                            self.delegate?.didReceiveDeepLink(deepLinkURL, clickId: self.activeClickId)
+                            self.delegate?.didReceiveDeepLink(routingURL, clickId: self.activeClickId)
                         }
                     } else {
-                        print("[TerraFlyerSDK] Fingerprint matched, but no deep link scheme configured for this campaign.")
-                        let error = NSError(domain: "TerraFlyerSDK", code: 204, userInfo: [NSLocalizedDescriptionKey: "No deep link schema was set for matched campaign"])
+                        print("[TerraFlyerSDK] Fingerprint matched, but no routing URL (deep link or universal link) configured.")
+                        let error = NSError(domain: "TerraFlyerSDK", code: 204, userInfo: [NSLocalizedDescriptionKey: "No routing URL was configured for matched campaign"])
                         self.delegate?.didFailToResolveLink(error: error)
                     }
                 }
