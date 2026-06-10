@@ -41,13 +41,6 @@ public class TerraFlyerSDK {
     /// - Parameter userActivity: The user activity containing the universal link webpageURL.
     /// - Returns: `true` if the URL belongs to your campaign links domain and is handled; `false` otherwise.
     @discardableResult
-    /// Handles direct Universal Links clicked when the app is already installed.
-    /// Call this from `application(_:continue:restorationHandler:)` in your AppDelegate,
-    /// or from SceneDelegate's `scene(_:continue:)`.
-    ///
-    /// - Parameter userActivity: The user activity containing the universal link webpageURL.
-    /// - Returns: `true` if the URL belongs to your campaign links domain and is handled; `false` otherwise.
-    @discardableResult
     public func handleUniversalLink(_ userActivity: NSUserActivity) -> Bool {
         guard let incomingURL = userActivity.webpageURL else { return false }
         print("[TerraFlyerSDK] Processing incoming Universal Link: \(incomingURL.absoluteString)")
