@@ -54,10 +54,18 @@ public class TerraFlyerSDK {
     }
     
     /// Queries the self-hosted backend to perform fuzzy IP + UserAgent fingerprint matching.
-    /// Call this on app startup (e.g. `application(_:didFinishLaunchingWithOptions:)` or `applicationDidBecomeActive`).
+    /// Call this on app startup. It automatically prevents double-counting by storing a launch flag in `UserDefaults`.
     ///
-    /// - Parameter value: Optional numeric value associated with the install conversion event.
-    public func checkForDeferredLink(value: Double = 0.0) {
+    /// - Parameters:
+    ///   - value: Optional numeric value associated with the install conversion event.
+    ///   - forceCheck: Set to `true` to bypass the local launch flag and force a check (e.g. for testing).
+    public func checkForDeferredLink(value: Double = 0.0, forceCheck: Bool = false) {
+        let userDefaultsKey = "TerraFlyerSDK_hasTrackedInstall"
+        if UserDefaults.standard.bool(forKey: userDefaultsKey) && !forceCheck {
+            print("[TerraFlyerSDK] Install already tracked. Skipping deferred check.")
+            return
+        }
+        
         guard let backendURL = self.backendURL else {
             let configError = NSError(domain: "TerraFlyerSDK", code: -1, userInfo: [NSLocalizedDescriptionKey: "SDK not configured. Call configure(backendURL:) first."])
             self.delegate?.didFailToResolveLink(error: configError)
@@ -113,6 +121,9 @@ public class TerraFlyerSDK {
                 self.delegate?.didFailToResolveLink(error: serverError)
                 return
             }
+            
+            // Mark install as successfully tracked to prevent double-counting on next startup
+            UserDefaults.standard.set(true, forKey: "TerraFlyerSDK_hasTrackedInstall")
             
             do {
                 if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
