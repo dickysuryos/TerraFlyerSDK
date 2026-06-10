@@ -34,7 +34,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, TerraFlyerDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         
         // 1. Configure the SDK with your self-hosted TerraFlyer endpoint
-        let backendURL = URL(string: "http://100.93.237.81:8088")!
+        let backendURL = URL(string: "http://10.0.3.20:8088")!
         TerraFlyerSDK.shared.configure(backendURL: backendURL)
         
         // 2. Assign the delegate to receive resolved deep link events
